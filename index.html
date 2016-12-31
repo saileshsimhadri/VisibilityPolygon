@@ -1,0 +1,170 @@
+<!doctype>
+<html>
+    <head>
+        <link rel="stylesheet" type="text/css" href="main.css">
+    </head>
+    <body>
+        <canvas id="canvas" width="640" height="360" style="border:1px solid #000000"></canvas><br>
+    <label class="switch">
+        <input class="switch-input" type="checkbox" id="live" onclick="toggleEdit(this)" checked/>
+        <span class="switch-label" data-on="Live" data-off="Edit"></span> 
+        <span class="switch-handle"></span> 
+    </label>
+    </body>
+</html>
+<script type="text/javascript" src="VisibilityPolygon.js"></script><br>
+<script type="text/javascript">
+var live = true;
+var updateCanvas = true;
+function draw(canvas, context, mainPoint, obstacles, vp){
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.beginPath();
+    context.moveTo(0, 0);
+    context.lineTo(canvas.width, 0);
+    context.lineTo(canvas.width, canvas.height);
+    context.lineTo(0, canvas.height);
+    context.closePath();
+    context.fillStyle= "#696969";
+    context.fill();
+    vp.draw(context);
+    for(var i=0; i<obstacles.length; i++){
+        obstacles[i].draw(context);
+    }
+    mainPoint.draw(context);
+}
+
+function toggleEdit(cb){
+    live = cb.checked;
+    updateCanvas = true;
+}
+
+var canvas = document.getElementById("canvas");
+var context = canvas.getContext("2d");
+var moveObst = null;
+var movePoint = false;
+var offsetX = canvas.getBoundingClientRect().left;
+var offsetY = canvas.getBoundingClientRect().top;
+var startX;
+var startY;
+        //var live = document.getElementById("live").checked;
+window.requestAnimationFrame = window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.msRequestAnimationFrame;
+
+var mainPoint = new Point(canvas.width/2, canvas.height/2);
+var obstacles = [
+new Obstacle([new Point(10, 10), new Point(50, 20), new Point(20, 70), new Point(10, 30), new Point(10, 10)]),
+
+                         new Obstacle([new Point(150, 180), new Point(150, 120), new Point(180, 130), new Point(150, 180)])];
+
+vp = new VisibilityPolygon(context, canvas, mainPoint, obstacles);
+
+function update(){
+    requestAnimationFrame(update);
+    if(updateCanvas){
+        draw(canvas, context, mainPoint, obstacles, vp);
+        updateCanvas = false;
+    }
+}
+
+
+console.log(vp.obstPoints.toString());
+var newObst;
+
+requestAnimationFrame(update);
+canvas.onmousedown = mouseclick;
+canvas.onmouseup = mouserelease;
+canvas.onmousemove = mousemove;
+
+function mouseclick(e){
+    e.preventDefault();
+    //e.stopPropogation();
+
+    startX = parseInt(e.clientX - offsetX);
+    startY = parseInt(e.clientY - offsetY);
+    if(live){
+        if(mainPoint.inside(startX, startY, context)){
+            movePoint = true;
+            return;
+        }
+        for(var i=obstacles.length - 1; i>=0; i--){
+            obstacle = obstacles[i];
+            if(obstacle.inside(startX, startY, context)){
+                moveObst = obstacles[i];
+                return;
+            }
+        }
+    }
+    else{
+        console.log(startX + " " + startY);
+        console.log(newObst)
+        if(!newObst){
+            newObst = [];
+            var newPoint = new Point(startX, startY);
+            newPoint.draw(context, 2, true, "black");
+            newObst.push(newPoint);
+        }
+        else if(Math.abs( newObst[0].x - startX ) < 10 && Math.abs( newObst[0].y - startY ) < 10 && newObst.length >= 3){
+            newObst.push(new Point(newObst[0].x, newObst[0].y));
+            var obst = new Obstacle(newObst);
+            console.log("obst: ", obst.toString());
+            obstacles.push(obst);
+            vp.addObstacle(obst);
+            vp.compute();
+            console.log(vp.obstPoints.toString());
+            updateCanvas = true;
+            newObst = null;
+        }
+        else{
+            var newPoint = new Point(startX, startY);
+            newPoint.draw(context, 2, true, "black");
+            newObst.push(new Point(startX, startY));
+            end = newObst.length - 1;
+            context.beginPath();
+            context.moveTo(newObst[end-1].x, newObst[end-1].y);
+            context.lineTo(newObst[end].x, newObst[end].y);
+            context.strokeStyle = "black";
+            context.stroke();
+         }
+    }
+}
+
+function mouserelease(e){
+    e.preventDefault();
+    //e.stopPropogation();
+    moveObst = false;
+    movePoint = false;
+}
+
+function angle(x,y){
+        return Math.atan2(y - canvas.height/2, x - canvas.width/2);
+        p = new Point(x,y);
+        p.draw(context);
+}
+
+function mousemove(e){
+    if(live){
+        if (!moveObst && !movePoint) {return;}
+
+        e.preventDefault();
+    //e.stopPropagation();
+
+        mouseX = parseInt(e.clientX - offsetX);
+        mouseY = parseInt(e.clientY - offsetY);
+        var dx = mouseX - startX;
+        var dy = mouseY - startY;
+        if (movePoint){
+            mainPoint.x = mouseX;
+            mainPoint.y = mouseY;
+            updateCanvas = true;
+        }
+        else if(moveObst){
+            moveObst.move(dx, dy);
+            vp.modifyObstacle(moveObst);    //moveObstacle(obstacles, obstIndex, dx, dy);
+            updateCanvas = true;
+        }
+        startX=mouseX;
+        startY=mouseY;
+    }
+}
+
+
+</script>
