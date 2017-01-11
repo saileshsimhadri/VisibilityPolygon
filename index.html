@@ -4,7 +4,7 @@
         <link rel="stylesheet" type="text/css" href="main.css">
     </head>
     <body>
-        <canvas id="canvas" width="640" height="360" style="border:1px solid #000000"></canvas><br>
+        <canvas id="canvas" width="1000" height="500" style="border:1px solid #000000"></canvas><br>
     <label class="switch">
         <input class="switch-input" type="checkbox" id="live" onclick="toggleEdit(this)" checked/>
         <span class="switch-label" data-on="Live" data-off="Edit"></span> 
@@ -26,10 +26,11 @@ function draw(canvas, context, mainPoint, obstacles, vp){
     context.closePath();
     context.fillStyle= "#696969";
     context.fill();
-    vp.draw(context);
     for(var i=0; i<obstacles.length; i++){
         obstacles[i].draw(context);
     }
+    vp.compute();
+    vp.draw(context);
     mainPoint.draw(context);
 }
 
@@ -89,6 +90,9 @@ function mouseclick(e){
             obstacle = obstacles[i];
             if(obstacle.inside(startX, startY, context)){
                 moveObst = obstacles[i];
+                for(var i = 0; i<moveObst.points.length; i++){
+                    console.log(moveObst.points[i]);
+                }
                 return;
             }
         }
@@ -105,11 +109,9 @@ function mouseclick(e){
         else if(Math.abs( newObst[0].x - startX ) < 10 && Math.abs( newObst[0].y - startY ) < 10 && newObst.length >= 3){
             newObst.push(new Point(newObst[0].x, newObst[0].y));
             var obst = new Obstacle(newObst);
-            console.log("obst: ", obst.toString());
             obstacles.push(obst);
             vp.addObstacle(obst);
             vp.compute();
-            console.log(vp.obstPoints.toString());
             updateCanvas = true;
             newObst = null;
         }
@@ -157,8 +159,9 @@ function mousemove(e){
             updateCanvas = true;
         }
         else if(moveObst){
-            moveObst.move(dx, dy);
-            vp.modifyObstacle(moveObst);    //moveObstacle(obstacles, obstIndex, dx, dy);
+            moveObst.move(dx,dy);
+            //vp.modifyObstacle(moveObst, dx, dy);    //moveObstacle(obstacles, obstIndex, dx, dy);
+            vp.changeObstacles(obstacles);
             updateCanvas = true;
         }
         startX=mouseX;

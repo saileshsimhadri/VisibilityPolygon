@@ -135,17 +135,51 @@ SortedArray.prototype = {
         this.points.splice(index, 0, point)
     },
 
-    remove:function(point){
-        index = this.find(point).index;
-        this.points.splice(index, 1);
+    remove:function(point, obstacle=null){
+        if(obstacle){
+            index = this.find(point, false, obstacle);
+        }
+        else{
+            index = this.find(point);
+        }
+        this.points.splice(index.index, 1);
     },
 
-    find:function(point, specific=true){
+    getObstacle:function(point, obst, index){
+        if(!obst){
+            return null;
+        }
+        if(!point.angle){
+            point.angle = this.angle(point);
+        }
+        var currentIndex = index;
+        var currentElement = this.points[currentIndex];
+        while(currentIndex < this.points.length && currentElement.angle == point.angle){
+            if(currentElement.obstacle == obst){
+                return currentIndex;
+            }
+            currentIndex++;
+            currentElement = this.points[currentIndex];
+        }
+        currentIndex = index - 1;
+        currentElement = this.points[currentIndex];
+        while(currentIndex >= 0 && currentElement.angle == point.angle){
+            if(currentElement.obstacle == obst){
+                return currentIndex;
+            }
+            currentIndex--;
+            currentElement = this.points[currentIndex];
+        }
+    },
+
+    find:function(point, specific=true, obstacle=null){
         var minIndex = 0;
         var maxIndex = this.points.length -1;
         var currentIndex;
         var currentPoint;
-
+        if(point.equals(new Point(70,120))){
+        }
+        point.angle = this.angle(point);
         while (minIndex <= maxIndex) {
             currentIndex = (minIndex + maxIndex) / 2 | 0;
             currentPoint = this.points[currentIndex];
@@ -160,16 +194,23 @@ SortedArray.prototype = {
 
             else{
                 re = this.getSpecific(point, currentIndex);
-                if(re && specific){
+                if(re!=null && specific){
                     return {
                         found:true,
-                        index:this.getSpecific(point, currentIndex)
+                        index:re
+                    };
+                }
+                re = this.getObstacle(point, obstacle, currentIndex);
+                if(re!=null && obstacle){
+                    return{
+                        found:true,
+                        index:re
                     };
                 }
                 else{
                     return {
-                        found:false,
-                        index:currentIndex+1
+                        found:true,
+                        index:currentIndex
                     }
                 }
             }
@@ -220,11 +261,17 @@ SortedArray.prototype = {
     },
 
     modifyObstacle:function(obstacle){
-        for(var i = 0; i<obstacle.points.length; i++){
-            this.remove(obstacle.points[i]);
-            this.add(obstacle.points[i]);
+        var pts = obstacle.points;
+        for(var i =0; i<obstacle.points.length-1; i++){
+            this.remove(pts[i],  obstacle);
+            this.remove(pts[i],  obstacle);
+ //           pt.x +=dx;
+  //          pt.y +=dy;
+   //         this.add(pt);
+    //        console.log(pt, this.toString());
         }
     },
+
 
     toString:function(){
         st ="";
@@ -264,8 +311,9 @@ VisibilityPolygon.prototype = {
             var pt2= new Point(pts[i].x, pts[i].y);
             var seg = new Segment(pt1, pt2);
             pt1.segment = seg;
+            pt1.obstacle = obstacle;
             pt2.segment = seg;
-            console.log(seg.pts());
+            pt2.obstacle = obstacle;
             seg.obstacle = obstacle;
             this.segments.push(seg);
             this.obstPoints.add(pt1);
@@ -273,9 +321,17 @@ VisibilityPolygon.prototype = {
         }
     },
 
-    modifyObstacle:function(obstacle){
+    modifyObstacle:function(obstacle, dx, dy){
         this.obstPoints.modifyObstacle(obstacle);
-        this.compute();
+        obstacle.move(dx, dy);
+        for(var i=0; i<this.segments.length; i++){
+            if(this.segments[i].obstacle == obstacle){
+                this.segments.splice(i, 1);
+                console.log("deleted")
+            }
+        }
+        console.log(obstacle.toString())
+        this.addObstacle(obstacle)
     },
 
     addObstacles:function(obstacles){
@@ -289,7 +345,6 @@ VisibilityPolygon.prototype = {
     },
 
     intersection:function(ray, segment){
-        console.log(segment.pts());
         var p1 = segment.point1;
         var p2 = segment.point2;
         if(Math.abs(p1.angle - ray.angle) < .001){
@@ -321,22 +376,35 @@ VisibilityPolygon.prototype = {
             }
             return new Point(x, y);
         }
+        console.log(segment.pts(), ray.angle)
         return null;
     },
 
-    closer:function(segment1, segment2){
+    closer:function(segment1, segment2, checkPoint){
         var side1 = this.side(segment1, this.point)
-        var side2 = this.side(segment1, segment2.point1)
-        var side3 = this.side(segment1, segment2.point2)
-        if((side1 != side2 && side2 != 0)|| (side1 != side3 && side3 != 0)){
+        if(checkPoint == segment2.point1){
+           otherPoint = segment2.point2
+        }
+        else{
+            otherPoint = segment2.point1
+        }
+        var side2 = this.side(segment1, checkPoint)
+        var side3 = this.side(segment1, otherPoint)
+        if(side1 != side2 && side2 != 0){
+            return segment1;
+        }
+        else if(side1 == side2 && side2 != 0){
+            return segment2
+        }
+        else if(side2==0 && side1 != side3){
             return segment1;
         }
         else{
-            return segment2;
+            return segment2
         }
     },
 
-    distFromLine:function(segment){
+    distFromLine:function(point1, point2){
         p1 = segment.point1;
         p2 = segment.point2;
         distance = Math.abs((p2.y-p1.y)*this.point.x-(p2.x-p1.x)*this.point.y+p2.x*p1.y-p2.y*p1.x)/Math.sqrt(Math.pow((p2.y-p1.y),2)+Math.pow((p2.x-p1.x),2));
@@ -352,19 +420,20 @@ VisibilityPolygon.prototype = {
         for(var i=0; i<this.segments.length; i++){
             var seg = this.segments[i];
             var inter = this.intersection(ray, seg);
-            if (inter){
+            if (inter && seg.point1.angle!=0 && seg.point2.angle != 0){
                 s[seg.toString()] = seg;
                 counter++;
                 if(minSeg){
-                    c = this.closer(seg, minSeg);
-                    if(c.segment != minSeg){
-                        minDistance = c.distance
-                        minSeg = c.segment;
+                    //c = this.closer(seg, minSeg, inter);
+                    d1 = this.distance(this.point, inter)
+                    if(d1 <  minDistance){
+                        minDistance = d1;
+                        minSeg = seg;
                         minInt = inter;
                     }
                 }
                 else{
-                    minDistance = this.distFromLine(seg);
+                    minDistance = this.distance(this.point, inter)
                     minSeg = seg;
                     minInt = inter;
                 }
@@ -375,22 +444,24 @@ VisibilityPolygon.prototype = {
     },
 
     minSegment:function(segs, ray){
-        var minDistance = 100000000;
+        var minDistance;
         var minSeg;
         var minInter;
         for(var key in segs){
             var s = segs[key];
             var inter = this.intersection(ray, s);
             if(minSeg){
-                var c = this.closer(s, minSeg);
-                if(c != minSeg){
-                    minSeg = c;
+                var d = this.distance(this.point, inter);
+                if(d < minDistance){
+                    minSeg = s;
                     minInter = inter;
+                    minDistance = d;
                 }
             }
             else{
                 minSeg = s;
                 minInt = inter;
+                minDistance = this.distance(this.point, inter);
             }
         }
         return {segment:minSeg,  point:minInter};
@@ -434,6 +505,17 @@ VisibilityPolygon.prototype = {
         }
     },
 
+    changeObstacles:function(obstacles){
+        this.segments = new Array();
+        this.center = new Point(canvas.width/2, canvas.height/2);
+        this.obstacles = obstacles;
+        this.obstPoints = new SortedArray(new Point(canvas.width/2, canvas.height/2));
+        boundary = new Obstacle([new Point(0, 0), new Point(canvas.width, 0), new Point(canvas.width, canvas.height), new Point(0, canvas.height), new Point(0,0)]);
+        this.addObstacle(boundary);
+        this.addObstacles(obstacles);
+        this.compute();
+    },
+
     compute:function(){
         var ray = new Ray(this.point, 0);
         var initial = this.initialSegments(ray);
@@ -448,6 +530,7 @@ VisibilityPolygon.prototype = {
             ray.angle = checkPoint.angle;
             checkSeg = checkPoint.segment;
             var status = this.updateSegment(currentSegments, checkSeg);
+            console.log(checkPoint)
             if(status.delete && currentSegment == checkSeg){
                 this.addPoint(checkPoint, lastPoint, poly);
                 if(currentSegments['length'] == 0){
@@ -456,7 +539,6 @@ VisibilityPolygon.prototype = {
                     continue;
                 }
                 var c = this.minSegment(currentSegments, ray);
-                console.log(currentSegments)
                 var inter = this.intersection(ray, c.segment);
                 this.addPoint(inter, checkPoint, poly);
                 lastPoint = inter;
@@ -470,7 +552,7 @@ VisibilityPolygon.prototype = {
                     lastPoint = checkPoint;
                     continue;
                 }
-                var c = this.closer(currentSegment, checkSeg);
+                var c = this.closer(currentSegment, checkSeg, checkPoint);
                 if(c != currentSegment){
                     var inter = this.intersection(ray, currentSegment);
                     this.addPoint(inter, lastPoint, poly);
